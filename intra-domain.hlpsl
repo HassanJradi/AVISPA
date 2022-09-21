@@ -1,0 +1,188 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role mobile_node (MN,MAG,AuS : agent, X,Y : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+	
+	played_by MN
+
+	def=
+
+		local	
+			State, T1, T2, T3, T4, V : nat,
+			AuthReq, AuthResp, RtrSol : message
+
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(start) =|>
+				State' := 1 /\ T1':= new() 
+							/\ SND(AuthReq.MN.AuS.T1'.H(MN.AuS.T1'.xor(H(X),H(Y)))) 
+							/\ secret(X,sec_x,{MN,AuS}) 
+							/\ secret(Y,sec_y,{MN,AuS}) 
+							/\ secret(xor(H(X),H(Y)),sec_hk,{MN,AuS}) 
+							/\ witness(MN,AuS,auth_1,xor(H(X),H(Y)))
+
+			1.	State	= 1 /\ RCV(AuthResp.MN.xor(V',H(H(X))).T2'.H(MN.xor(V',H(H(X))).T2'.H(H(X)))) =|>
+				State' := 2 /\ T3':= new() 
+							/\ SND(RtrSol.MN.T3'.H(MN.T3'.V)) 
+							/\ secret(V,sec_v,{MN,AuS}) 
+							/\ wrequest(MN,AuS,auth_2,H(H(X))) 
+							/\ witness(MN,MAG,auth_3,V)
+
+			2.	State	= 2 /\ RCV(RtrSol.MN.T4'.H(MN.T4'.V)) =|>
+				State' := 3 /\ secret(V,sec_v,{MN,MAG}) 
+							/\ wrequest(MN,MAG,auth_4,V)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role media_access_gateway (MN,MAG,AuS : agent, SK : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by MAG
+
+	def= 
+	
+		local 	
+			State, T2, T3, T4, V : nat,
+			HHK : hash(hash(symmetric_key)),
+			AuthResp, RtrSol, PBA, PBU, AuthSucc, RtrAdv : message
+
+		init
+			State  := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(AuthResp.MN.{V'}_SK.xor(V',HHK').T2'.H(MN.xor(V',HHK').T2'.HHK')) =|>
+				State' := 1 /\ SND(AuthResp.MN.xor(V',HHK').T2'.H(MN.xor(V',HHK').T2'.HHK')) 
+							/\ secret(sk,sec_sk,{MAG,AuS}) 
+							/\ secret(V,sec_v,{MAG,AuS})
+
+			1.	State	= 1 /\ RCV(RtrSol.MN.T3'.H(MN.T3'.V)) =|>
+				State' := 2 /\ SND(PBU.MN) 
+							/\ wrequest(MAG,MN,auth_3,V)
+
+			2.	State	= 2 /\ RCV(PBA.MN) =|>
+				State' := 3 /\ T4':= new() 
+							/\ SND(AuthSucc.MN) 
+							/\ SND(RtrAdv.MN.T4'.H(MN.T4'.V)) 
+							/\ secret(V,sec_v,{MN,MAG}) 
+							/\ witness(MAG,MN,auth_4,V)
+				
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role authentication_server (MN,MAG,AuS : agent, SK,X,Y : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by AuS 
+
+	def=
+
+		local		
+			State, T1, T2, V : nat,
+			AuthReq, AuthResp, AuthSucc : message
+			
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(AuthReq.MN.AuS.T1'.H(MN.AuS.T1'.xor(H(X),H(Y)))) =|>					
+				State' := 1 /\ V' := new() 
+							/\ T2':= new() 
+							/\ SND(AuthResp.MN.{V'}_SK.xor(V',H(H(X))).T2'.H(MN.xor(V',H(H(X))).T2'.H(H(X)))) 
+							/\ secret(sk,sec_sk,{MAG,AuS})
+							/\ secret(V,sec_v,{MAG,AuS}) 
+							/\ secret(X,sec_x,{MN,AuS}) 
+							/\ secret(Y,sec_y,{MN,AuS}) 
+							/\ secret(xor(H(X),H(Y)),sec_hk,{MN,AuS}) 
+							/\ wrequest(AuS,MN,auth_1,xor(H(X),H(Y))) 
+							/\ witness(AuS,MN,auth_2,H(H(X)))
+
+			1.	State	= 1 /\ RCV(AuthSucc.MN) =|>
+				State' := 2
+				
+end role	
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role local_mobility_anchor (MN,MAG,LMA : agent, SND,RCV : channel(dy))
+			
+	played_by LMA
+
+	def=
+	
+		local
+			State : nat,
+			PBU, PBA : message
+
+		init
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(PBU.MN) =|>	
+				State' := 1 /\ SND(PBA.MN)
+				
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role session (MN,MAG,AuS,LMA : agent, SK,X,Y : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+
+	def=
+
+		composition	
+			mobile_node(MN,MAG,AuS,X,Y,H,SND,RCV)
+			/\
+			media_access_gateway(MN,MAG,AuS,SK,H,SND,RCV)
+			/\
+			authentication_server(MN,MAG,AuS,SK,X,Y,H,SND,RCV)
+			/\
+			local_mobility_anchor(MN,MAG,LMA,SND,RCV)
+		
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role enviroment() 
+
+	def=
+
+		const	
+			mn,mag,aus,lma : agent,
+			h : hash_func,
+			sk,x,y : symmetric_key,
+			snd,rcv	: channel(dy),
+			
+			sec_sk, sec_x, sec_y, sec_hk, sec_v : protocol_id,
+			auth_1, auth_2, auth_3, auth_4 : protocol_id
+
+		intruder_knowledge = {mn,mag,lma,aus,h,i}
+
+		composition
+			session(mn,mag,aus,lma,sk,x,y,h,snd,rcv)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+goal
+	secrecy_of sec_sk
+	secrecy_of sec_x
+	secrecy_of sec_y
+	secrecy_of sec_hk
+	secrecy_of sec_v
+
+	weak_authentication_on auth_1
+	weak_authentication_on auth_2
+	weak_authentication_on auth_3
+	weak_authentication_on auth_4
+
+end goal
+
+enviroment()
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
