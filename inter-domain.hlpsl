@@ -1,6 +1,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-role mobile_node (MN,VMAG,HAuS : agent, X,Y : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+role mobile_node (MN,VMAG,VAuS,HAuS : agent, X,Y : symmetric_key, H : hash_func, SND,RCV : channel(dy))
 	
 	played_by MN
 
@@ -8,9 +8,9 @@ role mobile_node (MN,VMAG,HAuS : agent, X,Y : symmetric_key, H : hash_func, SND,
 
 		local	
 			State, HNP, T1, T2, T3, T4, N : nat,
-			VAuS : agent,
-            HK, VX, VY, VHK : symmetric_key,
-			AuthReq, RoamingAuthResp, AttachEventLauncher, RtrSolLauncher, RtrSol, RtrAdv, MIC : message
+            		HK, VX, VY, VHK : symmetric_key,
+			AuthRqst, RoamingAuthResp, RtrSol, RtrAdv : message,
+			MIC1, MIC2, MIC3, MIC4 : message
 
 		init	
 			State := 0
@@ -19,31 +19,28 @@ role mobile_node (MN,VMAG,HAuS : agent, X,Y : symmetric_key, H : hash_func, SND,
 
 			0.	State	= 0 /\ RCV(start) =|>
 				State' := 1 /\ T1':= new()
-                            /\ HK' := xor(H(X),H(Y))
-                            /\ MIC':= H(MN.HAuS.T1'.HK')
-                            /\ SND(AuthReq.MN.HAuS.T1'.MIC') 
-                            /\ secret(X,sec_x,{MN,HAuS}) 
-                            /\ secret(Y,sec_y,{MN,HAuS})
-                            /\ secret(HK,sec_hk,{MN,HAuS}) 
-                            /\ witness(MN,HAuS,auth_1,HK)
+                            				/\ HK' := xor(H(X),H(Y))
+                            				/\ MIC1':= H(MN.HAuS.T1'.HK')
+                            				/\ SND(AuthRqst.MN.HAuS.T1'.MIC1') 
+                            				/\ secret(X,sec_x,{MN,HAuS})
+                            				/\ secret(Y,sec_y,{MN,HAuS})
+                            				/\ secret(HK,sec_hk,{MN,HAuS})
+                            				/\ witness(MN,HAuS,auth_haus_mn,HK)
 
-			1.	State	= 1 /\ RCV(RoamingAuthResp.VAuS'.MN.N'.T2'.H(MN.N'.T2'.HK)) =|>
+			1.	State	= 1 /\ RCV(RoamingAuthResp.VAuS'.MN.N'.T2'.MIC2') /\ MIC2'=H(MN.N'.T2'.HK) =|>
 				State' := 2 /\ VX':= H(xor(X,N')) /\ VY':= H(xor(Y,N')) 
-                        	/\ VHK':= xor(H(VX'),H(VY'))
-							/\ SND(AttachEventLauncher)
-                            /\ secret(VX,sec_vx,{MN,HAuS,VAuS}) 
-                            /\ secret(VY,sec_vy,{MN,HAuS,VAuS})
-                            /\ secret(VHK,sec_vhk,{MN,VMAG,VAuS})
-                            /\ wrequest(MN,HAuS,auth_2,HK)
+                        				/\ VHK':= xor(H(VX'),H(VY'))
+							/\ T3':= new()
+        			       			/\ MIC3':= H(MN.T3'.VHK)
+							/\ SND(RtrSol.MN.T3'.MIC3')
+                            				/\ secret(VX,sec_vx,{MN,HAuS,VAuS}) 
+                            				/\ secret(VY,sec_vy,{MN,HAuS,VAuS})
+                            				/\ secret(VHK,sec_vhk,{MN,VMAG,VAuS})
+                            				/\ request(MN,HAuS,auth_mn_haus,HK)
+							/\ witness(MN,VMAG,auth_vmag_mn,VHK)
 
-			2. 	State	= 2 /\ RCV(RtrSolLauncher) =|>
-				State' := 3 /\ T3':= new()
-        			       	/\ MIC':= H(MN.T3'.VHK)
-							/\ SND(RtrSol.MN.T3'.MIC')
-							/\ witness(MN,VMAG,auth_3,VHK)
-
-			3.	State	= 3 /\ RCV(RtrAdv.MN.HNP'.T4'.H(MN.HNP'.T4'.VHK)) =|>
-				State' := 4 /\ wrequest(MN,VMAG,auth_4,VHK)
+			2.	State	= 2 /\ RCV(RtrAdv.MN.HNP'.T4'.MIC4') /\ MIC4'=H(MN.HNP'.T4'.VHK) =|>
+				State' := 3 /\ request(MN,VMAG,auth_mn_vmag,VHK)
 
 end role
 
@@ -58,38 +55,33 @@ role media_access_gateway (MN,VMAG,VAuS : agent, SK1 : symmetric_key, H : hash_f
 		local 	
 			State, HNP, T3, T4 : nat,
 			VHK : symmetric_key,
-			AttachEventLauncher, AttachEvent, AttachVerifier, RtrSolLauncher, RtrSol, PBU, PBA, RtrAdv, AuthSucc, MIC : message
+			AttachVerifier, RtrSol, PBU, PBA, RtrAdv, AuthSucc : message,
+			MIC3, MIC4 : message
 
 		init
 			State  := 0
 
 		transition
 
-			0.	State	= 0 /\ RCV(AttachEventLauncher) =|>
-				State' := 1 /\ SND(AttachEvent.MN)
+			0.	State	= 0 /\ RCV(AttachVerifier.{VHK'}_SK1) =|>
+				State' := 1
 
-			1.	State	= 1 /\ RCV(AttachVerifier.{VHK'}_SK1) =|>
-				State' := 2 /\ SND(RtrSolLauncher)
-						    /\ secret(SK1,sec_sk1,{VMAG,VAuS})
-						    /\ secret(VHK,sec_vhk,{MN,VMAG,VAuS})
+			1.	State	= 1 /\ RCV(RtrSol.MN.T3'.MIC3') /\ MIC3'=H(MN.T3'.VHK) =|>
+				State' := 2 /\ SND(PBU.MN)
 
-			2.	State	= 2 /\ RCV(RtrSol.MN.T3'.H(MN.T3'.VHK)) =|>
-				State' := 3 /\ SND(PBU.MN)
-						    /\ wrequest(VMAG,MN,auth_3,VHK)
-
-			3.	State	= 3 /\ RCV(PBA.MN) =|>
-				State' := 4 /\ HNP' := new()
+			2.	State	= 2 /\ RCV(PBA.MN) =|>
+				State' := 3 /\ HNP' := new()
 				 			/\ T4' := new()
-                            /\ MIC' := H(MN.HNP'.T4'.VHK)
-						    /\ SND(RtrAdv.MN.HNP'.T4'.MIC')
-						    /\ SND(AuthSucc.MN)
-						    /\ witness(VMAG,MN,auth_4,VHK)
+                            				/\ MIC4' := H(MN.HNP'.T4'.VHK)
+						    	/\ SND(RtrAdv.MN.HNP'.T4'.MIC4')
+						    	/\ SND(AuthSucc.MN)
+						    	/\ witness(VMAG,MN,auth_mn_vmag,VHK)
 
 end role
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-role visited_authentication_server (VMAG,VAuS,HAuS : agent, SK1,SK2 : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+role visited_authentication_server (MN,VMAG,VAuS,HAuS : agent, SK1,SK2 : symmetric_key, H : hash_func, SND,RCV : channel(dy))
 			
 	played_by VAuS 
 
@@ -97,26 +89,25 @@ role visited_authentication_server (VMAG,VAuS,HAuS : agent, SK1,SK2 : symmetric_
 
 		local		
 			State, T1, T2, N : nat,
-			MN : agent,
 			VX, VY, VHK : symmetric_key,
-			AuthReq, AttachEvent, AttachVerifier, RoamingAuthResp, MIC : message
+			AuthRqst, AttachEvent, AttachVerifier, RoamingAuthResp : message,
+			MIC1, MIC2 : message
 			
 		init	
 			State := 0
 
 		transition
 
-			0.	State	= 0 /\ RCV(AuthReq.MN'.HAuS.T1'.MIC') =|>
-				State' := 1 /\ SND(AuthReq.MN'.T1'.MIC')
+			0.	State	= 0 /\ RCV(AuthRqst.MN.HAuS.T1'.MIC1') =|>
+				State' := 1 /\ SND(AuthRqst.MN.T1'.MIC1')
 			
-			1.	State	= 1 /\ RCV(RoamingAuthResp.MN.{VX'.VY'}_SK2'.N'.T2'.MIC') =|>		
+			1.	State	= 1 /\ RCV(RoamingAuthResp.MN.{VX'.VY'}_SK2.N'.T2'.MIC2') =|>		
 				State' := 2 /\ VHK':= xor(H(VX'),H(VY'))
-                            /\ SND(RoamingAuthResp.VAuS.MN.N'.T2'.MIC') 
-						    /\ secret(SK1,sec_sk1,{VMAG,VAuS})
-						    /\ secret(SK2,sec_sk2,{VAuS,HAuS})
-						    /\ secret(VX,sec_vx,{VAuS,HAuS})
-						    /\ secret(VY,sec_vy,{VAuS,HAuS})
-						    /\ secret(VHK,sec_vhk,{MN,VAuS})
+                            				/\ SND(RoamingAuthResp.VAuS.MN.N'.T2'.MIC2')
+							/\ SND(AttachVerifier.MN.{VHK'}_SK1)
+						    	/\ secret(VX,sec_vx,{VAuS,HAuS})
+						    	/\ secret(VY,sec_vy,{VAuS,HAuS})
+						    	/\ secret(VHK,sec_vhk,{MN,VAuS})
 
 			2.	State	= 2 /\ RCV(AttachEvent.MN) =|>
 				State' := 3 /\ SND(AttachVerifier.{VHK}_SK1)
@@ -134,30 +125,30 @@ role home_authentication_server (MN,VAuS,HAuS : agent, SK2,X,Y : symmetric_key, 
 		local		
 			State, T1, T2, N : nat,
 			HK, VX, VY : symmetric_key,
-			AuthReq, RoamingAuthResp, AuthSucc, MIC : message
+			AuthRqst, RoamingAuthResp, AuthSucc : message,
+			MIC1, MIC2 : message
 			
 		init	
 			State := 0
 
 		transition
 			
-			0.	State	= 0 /\ RCV(AuthReq.MN.T1'.H(MN.HAuS.T1'.xor(H(X),H(Y)))) =|>					
+			0.	State	= 0 /\ RCV(AuthRqst.MN.T1'.MIC1') /\ MIC1'=H(MN.HAuS.T1'.xor(H(X),H(Y))) =|>					
 				State' := 1 /\ N' := new()
-                            /\ HK' := xor(H(X),H(Y))
-                            /\ T2' := new()
-                            /\ VX':= H(xor(X,N')) /\ VY':= H(xor(Y,N'))
-                            /\ MIC':= H(MN.N'.T2'.HK')
-                            /\ SND(RoamingAuthResp.MN.{VX'.VY'}_SK2.N'.T2'.MIC')
-                            /\ secret(SK2,sec_sk2,{VAuS,HAuS})
-                            /\ secret(X,sec_x,{MN,HAuS}) 
-                            /\ secret(Y,sec_y,{MN,HAuS}) 
-                            /\ secret(HK,sec_hk,{MN,HAuS}) 
-                            /\ secret(VX,sec_vx,{VAuS,HAuS})
-                            /\ secret(VY,sec_vy,{VAuS,HAuS})
-                            /\ wrequest(HAuS,MN,auth_1,HK)
-                            /\ witness(HAuS,MN,auth_2,HK)
+                            				/\ HK' := xor(H(X),H(Y))
+                            				/\ T2' := new()
+                            				/\ VX':= H(xor(X,N')) /\ VY':= H(xor(Y,N'))
+                            				/\ MIC2':= H(MN.N'.T2'.HK')
+                            				/\ SND(RoamingAuthResp.MN.{VX'.VY'}_SK2.N'.T2'.MIC2')
+                            				/\ secret(X,sec_x,{MN,HAuS})
+                            				/\ secret(Y,sec_y,{MN,HAuS})
+                            				/\ secret(HK,sec_hk,{MN,HAuS})
+                            				/\ request(HAuS,MN,auth_haus_mn,HK)
+                            				/\ witness(HAuS,MN,auth_mn_haus,HK)
+                            				/\ secret(VX,sec_vx,{VAuS,HAuS})
+                            				/\ secret(VY,sec_vy,{VAuS,HAuS})
 
-			0.	State	= 1 /\ RCV(AuthSucc.MN) =|>
+			1.	State	= 1 /\ RCV(AuthSucc.MN) =|>
 				State' := 2 
 				
 end role	
@@ -192,11 +183,11 @@ role session (MN,VMAG,VAuS,HAuS,VLMA : agent, SK1,SK2,X,Y : symmetric_key, H : h
 	def=
 
 		composition	
-			mobile_node(MN,VMAG,HAuS,X,Y,H,SND,RCV)
+			mobile_node(MN,VMAG,VAuS,HAuS,X,Y,H,SND,RCV)
 			/\
 			media_access_gateway(MN,VMAG,VAuS,SK1,H,SND,RCV)
 			/\
-			visited_authentication_server(VMAG,VAuS,HAuS,SK1,SK2,H,SND,RCV)
+			visited_authentication_server(MN,VMAG,VAuS,HAuS,SK1,SK2,H,SND,RCV)
 			/\
 			home_authentication_server(MN,VAuS,HAuS,SK2,X,Y,H,SND,RCV)
 			/\
@@ -217,7 +208,7 @@ role enviroment()
 			snd,rcv	: channel(dy),
 			
 			sec_sk1, sec_sk2, sec_x, sec_y, sec_hk, sec_vx, sec_vhk, sec_vy : protocol_id,
-			auth_1, auth_2, auth_3, auth_4 : protocol_id
+			auth_haus_mn, auth_mn_haus, auth_vmag_mn, auth_mn_vmag : protocol_id
 
 		intruder_knowledge = {mn,vmag,vaus,haus,vlma,h,i}
 
@@ -229,8 +220,6 @@ end role
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 goal
-	secrecy_of sec_sk1
-	secrecy_of sec_sk2
 	secrecy_of sec_x
 	secrecy_of sec_y
 	secrecy_of sec_hk
@@ -238,10 +227,10 @@ goal
 	secrecy_of sec_vy
 	secrecy_of sec_vhk
 
-	weak_authentication_on auth_1
-	weak_authentication_on auth_2
-	weak_authentication_on auth_3
-	weak_authentication_on auth_4
+	authentication_on auth_haus_mn
+	authentication_on auth_mn_haus
+	authentication_on auth_vmag_mn
+	authentication_on auth_mn_vmag
 
 end goal
 
