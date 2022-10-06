@@ -8,7 +8,7 @@ role mobile_node (MN,MAG,AuS : agent, X,Y : symmetric_key, H : hash_func, SND,RC
 
 		local	
 			State, T1, T2, T3, T4, V, W : nat,
-			HK : message,
+			HK : symmetric_key,
 			AuthRqst, AuthResp, RtrSol, RtrAdv : message,
 			MIC1, MIC2, MIC3, MIC4 : message
 
@@ -81,7 +81,7 @@ role authentication_server (MN,MAG,AuS : agent, X,Y,SK : symmetric_key, H : hash
 
 		local		
 			State, T1, T2, V, W : nat,
-			HK : message,
+			HK : symmetric_key,
 			AuthRqst, AuthResp, AuthSucc : message,
 			MIC1, MIC2 : message
 			
@@ -90,7 +90,7 @@ role authentication_server (MN,MAG,AuS : agent, X,Y,SK : symmetric_key, H : hash
 
 		transition
 
-			0.	State	= 0 /\ RCV(AuthRqst.MN.T1'.MIC1') /\ MIC1'=H(MN.T1'.HK') =|>					
+			0.	State	= 0 /\ RCV(AuthRqst.MN.T1'.MIC1') /\ MIC1'=H(MN.T1'.xor(H(X),H(Y))) =|>					
 				State' := 1 /\ HK':=xor(H(X),H(Y))
 							/\ V' := new() 
 							/\ W':= xor(V',H(HK'))
@@ -134,7 +134,7 @@ role enviroment()
 			x,y,sk : symmetric_key,
 			snd,rcv	: channel(dy),
 			
-			sec_x, sec_y, sec_hk: protocol_id,
+			sec_x, sec_y, sec_hk : protocol_id,
 			auth_aus_mn, auth_mn_aus, auth_mag_mn, auth_mn_mag : protocol_id
 
 		intruder_knowledge = {mn,mag,aus,h,i}
