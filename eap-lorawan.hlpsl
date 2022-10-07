@@ -1,0 +1,283 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role end_device (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, JoinEUI,DevEUI : nat , K,AppKey : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+	
+	played_by ED
+
+	def=
+
+		local	
+			State, DevNonce, JoinNonce : nat,
+			NwkKey : hash(symmetric_key),
+			JoinRequest, JoinAccept : message,
+			MICJR, MICAAA, MICJA : message
+
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(start) =|>
+				State' := 1 /\ DevNonce':= new()
+							/\ NwkKey':= H(K)
+							/\ MICJR':=H(JoinEUI.DevEUI.DevNonce'.NwkKey')
+							/\ MICAAA':=H(JoinEUI.DevEUI.DevNonce'.AppKey)
+							/\ SND(JoinRequest.JoinEUI.DevEUI.DevNonce'.MICJR'.MICAAA')
+							/\ witness(ED,AUSF,auth_cn_ed,NwkKey')
+							/\ witness(ED,AAA,auth_dn_ed,AppKey)
+
+			1.	State	= 1 /\ RCV(JoinAccept.JoinNonce'.MICJA') /\ MICJA'=H(JoinNonce'.NwkKey) =|>
+				State' := 2 /\ request(ED,AUSF,auth_ed_cn,NwkKey)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role g_node_b (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by GNB
+
+	def= 
+	
+		local 	
+			State, JoinEUI, DevEUI, DevNonce, JoinNonce : nat,
+			JoinRequest, JoinAccept, AuthenticationRequest, SessionEstablishmentRequest, EAPLoRaWANCN, EAPLoRaWANDN, EAPRQST, EAPRESP, EAPSUCCESS : message,
+			MICJR, MICAAA, MICJA : message
+
+		init
+			State  := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(JoinRequest.JoinEUI'.DevEUI'.DevNonce'.MICJR'.MICAAA') =|>
+				State' := 1 /\ SND(AuthenticationRequest.ED)
+
+			1.	State	= 1 /\ RCV(EAPLoRaWANCN.EAPRQST.ED) =|>
+				State' := 2 /\ JoinNonce':=new()
+							/\ SND(EAPLoRaWANCN.EAPRESP.JoinEUI.DevEUI.DevNonce.JoinNonce'.MICJR)
+
+			2.	State	= 2 /\ RCV(EAPLoRaWANCN.EAPSUCCESS.ED.MICJA') =|>
+				State' := 3 /\ SND(SessionEstablishmentRequest.ED)
+
+			3.	State	= 3 /\ RCV(EAPLoRaWANDN.EAPRQST.ED) =|>
+				State' := 4 /\ SND(EAPLoRaWANDN.EAPRESP.JoinEUI.DevEUI.DevNonce.JoinNonce.MICAAA)
+
+			4.	State	= 4 /\ RCV(EAPLoRaWANDN.EAPSUCCESS.ED) =|>
+				State' := 5 /\ SND(JoinAccept.JoinNonce.MICJA)  
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role access_and_mobility_management_function (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by AMF
+
+	def= 
+	
+		local 	
+			State, JoinEUI, DevEUI, DevNonce, JoinNonce : nat,
+			AuthenticationRequest, SessionEstablishmentRequest, EAPLoRaWANCN, EAPLoRaWANDN, EAPRQST, EAPRESP, EAPSUCCESS : message,
+			MICJR, MICJA, MICAAA : message
+
+		init
+			State  := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(AuthenticationRequest.ED) =|>
+				State' := 1 /\ SND(AuthenticationRequest.ED)
+
+			1.	State	= 1 /\ RCV(EAPLoRaWANCN.EAPRQST.ED) =|>
+				State' := 2 /\ SND(EAPLoRaWANCN.EAPRQST.ED)
+
+			2.	State	= 2 /\ RCV(EAPLoRaWANCN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICJR') =|>					
+				State' := 3 /\ SND(EAPLoRaWANCN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICJR')
+
+			3.	State	= 3 /\ RCV(EAPLoRaWANCN.EAPSUCCESS.ED.MICJA') =|>
+				State' := 4 /\ SND(EAPLoRaWANCN.EAPSUCCESS.ED.MICJA')
+
+			4.	State	= 4 /\ RCV(SessionEstablishmentRequest.ED) =|>
+				State' := 5 /\ SND(SessionEstablishmentRequest.ED)
+
+			5.	State	= 5 /\ RCV(EAPLoRaWANDN.EAPRQST.ED) =|>
+				State' := 6 /\ SND(EAPLoRaWANDN.EAPRQST.ED)
+
+			6.	State	= 6 /\ RCV(EAPLoRaWANDN.EAPRESP.JoinEUI.DevEUI.DevNonce.JoinNonce'.MICAAA') =|>
+				State' := 7 /\ SND(EAPLoRaWANDN.EAPRESP.JoinEUI.DevEUI.DevNonce.JoinNonce'.MICAAA')
+
+			7.	State	= 7 /\ RCV(EAPLoRaWANDN.EAPSUCCESS.ED) =|>
+				State' := 8 /\ SND(EAPLoRaWANDN.EAPSUCCESS.ED)
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role session_management_function (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by SMF
+
+	def= 
+	
+		local 	
+			State, JoinEUI, DevEUI, DevNonce, JoinNonce : nat,
+			AuthenticationRequest, SessionEstablishmentRequest, EAPLoRaWANDN, EAPRQST, EAPRESP, EAPSUCCESS : message,
+			MICAAA : message
+
+		init
+			State  := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(SessionEstablishmentRequest.ED) =|>
+				State' := 1 /\ SND(SessionEstablishmentRequest.ED)
+
+			1.	State	= 1 /\ RCV(EAPLoRaWANDN.EAPRQST.ED) =|>
+				State' := 2 /\ SND(EAPLoRaWANDN.EAPRQST.ED)
+
+			2.	State	= 2 /\ RCV(EAPLoRaWANDN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICAAA') =|>
+				State' := 3 /\ SND(EAPLoRaWANDN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICAAA')
+
+			3.	State	= 3 /\ RCV(EAPLoRaWANDN.EAPSUCCESS.ED) =|>
+				State' := 4 /\ SND(EAPLoRaWANDN.EAPSUCCESS.ED)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role authentication_server_function (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, SK : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by AUSF 
+
+	def=
+
+		local		
+			State, JoinEUI, DevEUI, DevNonce, JoinNonce : nat,
+			NwkKey : hash(symmetric_key),
+			AuthenticationRequest, AuthenticationResponse, EAPLoRaWANCN, EAPRQST, EAPRESP, EAPSUCCESS : message,
+			MICJR, MICJA : message
+			
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(AuthenticationResponse.{NwkKey'}_SK) =|>					
+				State' := 1 /\ SND(EAPLoRaWANCN.EAPRQST.ED) 
+							
+
+			1.	State	= 1 /\ RCV(EAPLoRaWANCN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICJR') 
+							/\ MICJR'=H(JoinEUI'.DevEUI'.DevNonce'.NwkKey) =|>					
+				State' := 2 /\ MICJA':=H(JoinNonce'.NwkKey)
+							/\ SND(EAPLoRaWANCN.EAPSUCCESS.ED.MICJA')
+							/\ request(AUSF,ED,auth_cn_ed,NwkKey)
+							/\ witness(AUSF,ED,auth_ed_cn,NwkKey)
+				
+end role	
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role unified_data_management (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, K,SK : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by UDM 
+
+	def=
+
+		local		
+			State : nat,
+			NwkKey : hash(symmetric_key),
+			AuthenticationRequest, AuthenticationResponse : message
+			
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(AuthenticationRequest.ED) =|>					
+				State' := 1 /\ NwkKey':= H(K)
+							/\ SND(AuthenticationResponse.{NwkKey'}_SK)
+				
+end role	
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role aaa_server (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, AppKey : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+			
+	played_by AAA 
+
+	def=
+
+		local		
+			State, JoinEUI, DevEUI, DevNonce, JoinNonce : nat,
+			SessionEstablishmentRequest, EAPLoRaWANDN, EAPRQST, EAPRESP, EAPSUCCESS : message,
+			MICAAA : message
+			
+		init	
+			State := 0
+
+		transition
+
+			0.	State	= 0 /\ RCV(SessionEstablishmentRequest.ED) =|>					
+				State' := 1 /\ SND(EAPLoRaWANDN.EAPRQST.ED)
+
+			1.	State	= 1 /\ RCV(EAPLoRaWANDN.EAPRESP.JoinEUI'.DevEUI'.DevNonce'.JoinNonce'.MICAAA') /\ MICAAA' = H(JoinEUI'.DevEUI'.DevNonce'.AppKey) =|>
+				State' := 2 /\ SND(EAPLoRaWANDN.EAPSUCCESS.ED)
+							/\ request(AAA,ED,auth_dn_ed,AppKey)
+				
+end role	
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role session (ED,GNB,AMF,SMF,AUSF,UDM,AAA : agent, JoinEUI,DevEUI : nat , K,AppKey,SK : symmetric_key, H : hash_func, SND,RCV : channel(dy))
+
+	def=
+		composition	
+			end_device(ED,GNB,AMF,SMF,AUSF,UDM,AAA,JoinEUI,DevEUI,K,AppKey,H,SND,RCV)
+			/\
+			g_node_b(ED,GNB,AMF,SMF,AUSF,UDM,AAA,H,SND,RCV)
+			/\
+			access_and_mobility_management_function(ED,GNB,AMF,SMF,AUSF,UDM,AAA,H,SND,RCV)
+			/\
+			session_management_function(ED,GNB,AMF,SMF,AUSF,UDM,AAA,H,SND,RCV)
+			/\
+			authentication_server_function(ED,GNB,AMF,SMF,AUSF,UDM,AAA,SK,H,SND,RCV)
+			/\
+			unified_data_management(ED,GNB,AMF,SMF,AUSF,UDM,AAA,K,SK,H,SND,RCV)
+			/\
+			aaa_server(ED,GNB,AMF,SMF,AUSF,UDM,AAA,AppKey,H,SND,RCV)
+ 
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+role enviroment() 
+
+	def=
+
+		const	
+			ed,gnb,amf,smf,ausf,udm,aaa : agent,
+			joineui,deveui : nat,
+			h : hash_func,
+			k,appkey,sk : symmetric_key,
+			snd,rcv	: channel(dy),
+			
+			auth_cn_ed, auth_ed_cn, auth_dn_ed : protocol_id
+
+		intruder_knowledge = {ed,gnb,amf,smf,ausf,udm,aaa,joineui,deveui,h,i}
+
+		composition
+			session(ed,gnb,amf,smf,ausf,udm,aaa,joineui,deveui,k,appkey,sk,h,snd,rcv)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+goal
+
+	authentication_on auth_cn_ed
+	authentication_on auth_ed_cn
+	authentication_on auth_dn_ed
+
+end goal
+
+enviroment()
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
